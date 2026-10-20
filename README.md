@@ -204,6 +204,23 @@ npm start
 
 長期執行可用 systemd 或 `pm2 start server.js --name rights-power`；前面放 Nginx 加上 HTTPS 時，記得在 `.env` 設 `TRUST_PROXY=1`、`COOKIE_SECURE=1`。
 
+### D. 放到 GitHub
+
+1. 到 GitHub 建立一個新的 repository，**建議選 Private（私人）**，不要勾選「Add a README」。
+2. 網頁上傳（不用裝任何軟體）：進入剛建立的 repository →「uploading an existing file」→ 把解壓縮後資料夾裡的**所有檔案和資料夾**拖進去 → Commit changes。
+   - 不要上傳 `.env`（裡面有後台密碼）和 `data/` 裡的資料庫。
+3. 若電腦有安裝 Git，也可以在專案資料夾執行：
+
+   ```bash
+   git init -b main
+   git add -A
+   git commit -m "first commit"
+   git remote add origin https://github.com/你的帳號/rights-power-game.git
+   git push -u origin main
+   ```
+
+**個資提醒**：真實的學生名單請放在 `private/` 資料夾，或檔名包含「名單」（例如 `701名單.csv`），這些檔案已設定成不會被 Git 上傳。名單只需要在後台匯入一次，不必放進 GitHub。
+
 ---
 
 ## 七、備份與還原
