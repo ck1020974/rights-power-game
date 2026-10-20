@@ -1,0 +1,18 @@
+{
+  "name": "rights-vs-power-game",
+  "version": "1.0.0",
+  "private": true,
+  "description": "權利 vs 權力｜3分鐘極限挑戰（國中公民競賽遊戲）",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "demo": "node scripts/import.js demo",
+    "import:students": "node scripts/import.js students",
+    "import:questions": "node scripts/import.js questions",
+    "backup": "node scripts/backup.js",
+    "test": "node --test \"test/*.test.js\""
+  }
+}

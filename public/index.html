@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2f4a3a">
+  <title>權利 vs 權力｜3分鐘極限挑戰</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- 背景文具（純裝飾） -->
+  <div class="decor" aria-hidden="true">
+    <svg class="d-pencil" viewBox="0 0 220 40"><rect x="30" y="8" width="150" height="24" rx="2" fill="#f2b705" stroke="#3a2a14" stroke-width="2.5"/><rect x="180" y="8" width="22" height="24" rx="3" fill="#e98a9b" stroke="#3a2a14" stroke-width="2.5"/><rect x="172" y="8" width="10" height="24" fill="#b8bfc4" stroke="#3a2a14" stroke-width="2.5"/><path d="M30 8 L4 20 L30 32 Z" fill="#f1d7b0" stroke="#3a2a14" stroke-width="2.5" stroke-linejoin="round"/><path d="M12 16 L4 20 L12 24 Z" fill="#3a2a14"/><line x1="40" y1="20" x2="168" y2="20" stroke="#d99a00" stroke-width="2"/></svg>
+    <svg class="d-plane" viewBox="0 0 120 80"><path d="M4 40 L116 6 L70 74 L54 48 Z" fill="#fff" stroke="#3a4a42" stroke-width="2.5" stroke-linejoin="round"/><path d="M54 48 L116 6" stroke="#3a4a42" stroke-width="2"/><path d="M54 48 L58 66 L70 74" fill="#e4e9e5" stroke="#3a4a42" stroke-width="2" stroke-linejoin="round"/></svg>
+    <svg class="d-ruler" viewBox="0 0 260 44"><rect x="2" y="2" width="256" height="40" rx="4" fill="#bfe3d6" fill-opacity=".85" stroke="#3a4a42" stroke-width="2.5"/><g stroke="#3a4a42" stroke-width="2"><line x1="20" y1="2" x2="20" y2="20"/><line x1="40" y1="2" x2="40" y2="12"/><line x1="60" y1="2" x2="60" y2="12"/><line x1="80" y1="2" x2="80" y2="12"/><line x1="100" y1="2" x2="100" y2="20"/><line x1="120" y1="2" x2="120" y2="12"/><line x1="140" y1="2" x2="140" y2="12"/><line x1="160" y1="2" x2="160" y2="12"/><line x1="180" y1="2" x2="180" y2="20"/><line x1="200" y1="2" x2="200" y2="12"/><line x1="220" y1="2" x2="220" y2="12"/><line x1="240" y1="2" x2="240" y2="12"/></g></svg>
+    <svg class="d-eraser" viewBox="0 0 90 50"><rect x="4" y="8" width="82" height="36" rx="5" fill="#fff" stroke="#3a4a42" stroke-width="2.5"/><rect x="30" y="8" width="56" height="36" fill="#4f7cc9" stroke="#3a4a42" stroke-width="2.5"/><text x="58" y="31" font-size="13" text-anchor="middle" fill="#fff" font-weight="700">ERASE</text></svg>
+  </div>
+
+  <!-- 登入：學生證 -->
+  <section class="screen" id="screen-login" data-active>
+    <div class="login-wrap">
+      <header class="chalkboard chalkboard-title">
+        <h1 class="title"><span class="t-right">權利</span><span class="t-vs">vs</span><span class="t-power">權力</span></h1>
+        <p class="subtitle">3 分鐘極限挑戰</p>
+        <div class="chalk-tray" aria-hidden="true"><i class="chalk"></i><i class="chalk chalk-y"></i><i class="duster"></i></div>
+      </header>
+
+      <form id="login-form" class="id-card" autocomplete="off">
+        <div class="id-strip"><span class="id-crest">公民</span><span>學生證</span></div>
+        <div class="id-body">
+          <div class="id-photo" aria-hidden="true"><svg viewBox="0 0 60 72"><circle cx="30" cy="26" r="13" fill="#c5cfc8"/><path d="M6 72c2-16 12-24 24-24s22 8 24 24z" fill="#c5cfc8"/></svg></div>
+          <div class="id-fields">
+            <label for="student-id">學號</label>
+            <input id="student-id" name="studentId" inputmode="numeric" maxlength="30" required placeholder="例如 70101">
+          </div>
+        </div>
+        <p class="form-error" id="login-error" role="alert"></p>
+        <button class="btn btn-primary" type="button" id="login-btn">進入教室</button>
+      </form>
+      <p class="hint-link"><a href="#" id="show-board-from-login">看榮譽榜</a></p>
+    </div>
+  </section>
+
+  <!-- 大廳：公布欄 -->
+  <section class="screen" id="screen-lobby">
+    <div class="lobby">
+      <header class="name-tag">
+        <div>
+          <p class="who"><span id="lobby-class"></span><strong id="lobby-name"></strong></p>
+          <p class="best">個人最高分 <strong id="lobby-best">0</strong><span class="plays" id="lobby-plays"></span></p>
+        </div>
+        <button class="btn btn-ghost" id="logout-btn" type="button">換人</button>
+      </header>
+
+      <div class="cork">
+        <div class="note rules">
+          <i class="pin" aria-hidden="true"></i>
+          <h2>遊戲規則</h2>
+          <ol>
+            <li><b data-cfg="duration">3 分鐘</b>內，判斷是「權利」還是「權力」</li>
+            <li>答對 <b data-cfg="base">+100</b>，越快答越多分</li>
+            <li>答錯 <b data-cfg="penalty">−50</b>，連錯 <b data-cfg="cdn">2</b> 題暫停 <b data-cfg="cds">2</b> 秒</li>
+            <li>連續答對有額外加分</li>
+          </ol>
+          <p class="keys">鍵盤可用 <kbd>←</kbd> <kbd>→</kbd> 作答</p>
+        </div>
+
+        <div class="honor">
+          <i class="pin" aria-hidden="true"></i>
+          <div class="honor-head">
+            <h2>榮譽榜</h2>
+            <select id="board-class-lobby" class="board-filter" aria-label="選擇班級"></select>
+          </div>
+          <ol class="board" id="board-lobby"></ol>
+        </div>
+      </div>
+
+      <button class="btn btn-bell" id="start-btn" type="button">
+        <svg class="bell" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 5c-7 0-11 5-11 12v7l-4 5h30l-4-5v-7C31 10 27 5 20 5z" fill="#fff" stroke="#3a2a14" stroke-width="2.5" stroke-linejoin="round"/><circle cx="20" cy="33" r="3.5" fill="#3a2a14"/></svg>
+        開始挑戰
+      </button>
+    </div>
+  </section>
+
+  <!-- 獨立排行榜（未登入） -->
+  <section class="screen" id="screen-board">
+    <div class="lobby">
+      <div class="cork cork-single">
+        <div class="honor">
+          <i class="pin" aria-hidden="true"></i>
+          <div class="honor-head">
+            <h2>榮譽榜</h2>
+            <select id="board-class-public" class="board-filter" aria-label="選擇班級"></select>
+          </div>
+          <ol class="board" id="board-public"></ol>
+        </div>
+      </div>
+      <button class="btn btn-ghost" id="back-to-login" type="button">回到登入</button>
+    </div>
+  </section>
+
+  <!-- 遊戲：黑板＋書桌 -->
+  <section class="screen" id="screen-game">
+    <div class="game">
+      <div class="chalkboard chalkboard-game">
+        <header class="hud">
+          <div class="hud-timer" id="timer-box">
+            <svg class="clock" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="17" fill="#fff" stroke="#f4f2ea" stroke-width="3"/><line x1="20" y1="20" x2="20" y2="9" stroke="#2f4a3a" stroke-width="3" stroke-linecap="round" id="clock-hand"/><circle cx="20" cy="20" r="2.5" fill="#2f4a3a"/></svg>
+            <span class="timer" id="timer">3:00</span>
+          </div>
+          <div class="hud-score"><span class="hud-label">得分</span><span class="score" id="score">0</span></div>
+          <div class="hud-combo" id="combo-box"><span class="hud-label">連對</span><span class="combo" id="combo">0</span></div>
+        </header>
+        <div class="time-bar"><div class="time-fill" id="time-fill"></div></div>
+
+        <div class="q-card" id="q-card">
+          <span class="q-no" id="q-no">第 1 題</span>
+          <p class="q-text" id="q-text"></p>
+          <svg class="mark" id="mark" viewBox="0 0 100 100" aria-hidden="true">
+            <defs>
+              <!-- 粉筆質感：邊緣微微抖動＋顆粒狀缺口 -->
+              <filter id="chalky" x="-20%" y="-20%" width="140%" height="140%">
+                <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="2" seed="3" result="warp"/>
+                <feDisplacementMap in="SourceGraphic" in2="warp" scale="3.5" result="rough"/>
+                <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="1" seed="9" result="grain"/>
+                <feColorMatrix in="grain" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -2.4 0 0 0 2.2" result="holes"/>
+                <feComposite in="rough" in2="holes" operator="in"/>
+              </filter>
+            </defs>
+            <g filter="url(#chalky)">
+              <path class="mark-o" d="M64 14 C36 8 12 26 13 52 C14 78 40 92 64 84 C86 76 94 52 84 32 C78 20 66 13 52 13" pathLength="1"/>
+              <path class="mark-x" d="M25 24 C40 40 58 60 76 79" pathLength="1"/>
+              <path class="mark-x mark-x2" d="M75 23 C60 40 42 60 26 80" pathLength="1"/>
+            </g>
+          </svg>
+          <div class="float-layer" id="float-layer" aria-hidden="true"></div>
+          <div class="combo-pop" id="combo-pop" aria-live="polite"></div>
+          <div class="cooldown" id="cooldown" hidden>
+            <p>連錯兩題，暫停一下</p>
+            <span class="cooldown-num" id="cooldown-num">2</span>
+          </div>
+        </div>
+        <div class="chalk-tray" aria-hidden="true"><i class="chalk"></i><i class="chalk chalk-y"></i><i class="chalk chalk-p"></i><i class="duster"></i></div>
+      </div>
+
+      <div class="desk">
+        <div class="choices" id="choices">
+          <button class="choice" id="choice-0" type="button" data-idx="0"><span class="choice-key" aria-hidden="true">←</span><span class="choice-text"></span></button>
+          <button class="choice" id="choice-1" type="button" data-idx="1"><span class="choice-key" aria-hidden="true">→</span><span class="choice-text"></span></button>
+        </div>
+      </div>
+    </div>
+    <div class="countdown" id="countdown" hidden><p>準備上課</p><span id="countdown-num">3</span></div>
+  </section>
+
+  <!-- 結算：成績單 -->
+  <section class="screen" id="screen-result">
+    <div class="result">
+      <div class="report">
+        <header class="rc-head">
+          <p class="rc-sub">權利 vs 權力｜3 分鐘極限挑戰</p>
+          <h2 class="report-title" id="r-title">公民科 學習成績單</h2>
+        </header>
+        <table class="rc-info">
+          <tr><th>班級</th><td id="r-class"></td><th>姓名</th><td id="r-name"></td></tr>
+          <tr><th>日期</th><td id="r-date" colspan="3"></td></tr>
+        </table>
+        <div class="rc-main">
+          <table class="rc-table">
+            <thead><tr><th>項目</th><th>成績</th></tr></thead>
+            <tbody>
+              <tr><th>本次分數</th><td><span class="rc-score" id="r-score">0</span></td></tr>
+              <tr><th>答對題數</th><td id="r-correct">0</td></tr>
+              <tr><th>正確率</th><td id="r-acc">0%</td></tr>
+              <tr><th>最高連對</th><td id="r-combo">0</td></tr>
+              <tr><th>歷史最高分</th><td id="r-best">0</td></tr>
+              <tr><th>全校排名</th><td id="r-rank">—</td></tr>
+            </tbody>
+          </table>
+          <div class="rc-grade">
+            <span class="rc-grade-label">等第</span>
+            <span class="rc-grade-mark" id="r-grade">—</span>
+            <div class="stamp" id="record-banner" hidden><span>NEW RECORD！</span><small>刷新個人紀錄</small></div>
+          </div>
+        </div>
+        <div class="rc-comment">
+          <span class="rc-comment-label">評語</span>
+          <div>
+            <p id="r-comment"></p>
+            <p class="rc-next" id="r-next"></p>
+          </div>
+        </div>
+        <footer class="rc-foot"><span>公民科任課老師</span><span class="rc-seal" aria-hidden="true">公民<br>科印</span></footer>
+        <details class="review" id="review" hidden>
+          <summary>訂正錯題（<span id="review-count">0</span> 題）</summary>
+          <ol id="review-list"></ol>
+        </details>
+      </div>
+      <div class="result-actions">
+        <button class="btn btn-bell" id="again-btn" type="button">再玩一次</button>
+        <button class="btn btn-ghost" id="lobby-btn" type="button">回公布欄</button>
+      </div>
+    </div>
+    <div class="confetti" id="confetti" aria-hidden="true"></div>
+  </section>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="js/game.js"></script>
+</body>
+</html>
