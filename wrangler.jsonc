@@ -16,7 +16,7 @@
       "binding": "DB",
       "database_name": "rights-power-db",
       // 在 Cloudflare 後台建立 D1 資料庫後，把它的 Database ID 貼在這裡
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
+      "database_id": "8274b07e-db58-4840-80f7-3731619a2ca9"
     }
   ],
   "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }],
