@@ -1,6 +1,8 @@
 -- ============================================================
---  資料庫結構（SQLite）。伺服器啟動時會自動建立，可重複執行。
---  資料檔位置：data/game.db（可用環境變數 DATA_DIR 更改）
+--  資料庫結構（SQLite／Cloudflare D1 共用）。啟動時自動建立，可重複執行。
+--  為了符合 Cloudflare 免費額度（每天 10 萬列寫入），設計重點是「每答一題只寫 1 列」：
+--    · 每題作答紀錄存在 game_sessions.log（JSON 陣列），不另外開一列
+--    · 排行榜讀 best_scores、題目統計讀 question_stats，都是小表，讀取量很低
 -- ============================================================
 
 -- 學生名單（由 CSV 匯入）
@@ -12,8 +14,7 @@ CREATE TABLE IF NOT EXISTS students (
   active      INTEGER NOT NULL DEFAULT 1, -- 0 = 停用（不能登入、不列入排行榜）
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_name);
+) WITHOUT ROWID;
 
 -- 題庫（由 CSV 匯入；以「題號 code」識別同一題）
 CREATE TABLE IF NOT EXISTS questions (
@@ -24,18 +25,19 @@ CREATE TABLE IF NOT EXISTS questions (
   difficulty  INTEGER NOT NULL CHECK (difficulty BETWEEN 1 AND 3),
   category    TEXT,
   explanation TEXT,
-  active      INTEGER NOT NULL DEFAULT 1, -- 0 = 停用（不會出題，但保留作答紀錄）
+  active      INTEGER NOT NULL DEFAULT 1, -- 0 = 停用（不會出題，但保留統計）
   created_at  INTEGER NOT NULL,
   updated_at  INTEGER NOT NULL
 );
 
 -- 每一局遊戲
 CREATE TABLE IF NOT EXISTS game_sessions (
-  id              TEXT PRIMARY KEY,        -- 隨機字串，同時是該局的通行憑證
-  student_id      TEXT NOT NULL REFERENCES students(student_id),
-  status          TEXT NOT NULL CHECK (status IN ('active','finished')),
-  started_at      INTEGER NOT NULL,        -- 按下開始的時間（毫秒）
-  plays_at        INTEGER NOT NULL,        -- 第一題開放作答、開始計時的時間
+  id              INTEGER PRIMARY KEY,
+  token           TEXT NOT NULL UNIQUE,     -- 隨機字串，同時是這局的通行憑證
+  student_id      TEXT NOT NULL,
+  status          TEXT NOT NULL,            -- active / finished
+  started_at      INTEGER NOT NULL,
+  plays_at        INTEGER NOT NULL,         -- 第一題開放作答、開始計時
   ends_at         INTEGER NOT NULL,
   finished_at     INTEGER,
   score           INTEGER NOT NULL DEFAULT 0,
@@ -45,55 +47,39 @@ CREATE TABLE IF NOT EXISTS game_sessions (
   combo           INTEGER NOT NULL DEFAULT 0,
   max_combo       INTEGER NOT NULL DEFAULT 0,
   wrong_streak    INTEGER NOT NULL DEFAULT 0,
-  sequence        TEXT NOT NULL,           -- 本局題目順序（JSON 陣列，內容為 questions.id）
+  total_ms        INTEGER NOT NULL DEFAULT 0, -- 所有作答秒數加總（毫秒）
+  sequence        TEXT NOT NULL,            -- 題目順序（JSON 陣列，questions.id）
   seq_index       INTEGER NOT NULL DEFAULT 0,
-  question_shown_at INTEGER NOT NULL,      -- 目前這題「可作答」的時間（冷卻時會延後）
-  layout          TEXT NOT NULL,           -- 目前這題按鈕排列：rl=權利在左／lr=權力在左
+  question_shown_at INTEGER NOT NULL,       -- 目前這題可作答的時間（冷卻時延後）
+  layout          TEXT NOT NULL,            -- rl = 權利在左、lr = 權力在左
   layout_run      INTEGER NOT NULL DEFAULT 1,
-  prev_best       INTEGER,                 -- 本局結束時，先前的歷史最高分（首次遊玩為 NULL）
+  -- 作答紀錄：每題一筆 [題目id, 選擇(0=權利,1=權力), 對錯(1/0), 毫秒, 得分變化, 排列(0=rl,1=lr), 冷卻毫秒, 時間戳]
+  log             TEXT NOT NULL DEFAULT '[]',
+  prev_best       INTEGER,
   is_new_record   INTEGER NOT NULL DEFAULT 0,
-  config_snapshot TEXT NOT NULL            -- 開始當下使用的設定（JSON）
+  config_snapshot TEXT NOT NULL             -- 開局當下的設定（JSON）
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_student ON game_sessions(student_id, status);
 CREATE INDEX IF NOT EXISTS idx_sessions_status_end ON game_sessions(status, ends_at);
 
--- 每一題的作答紀錄
-CREATE TABLE IF NOT EXISTS answers (
-  id             INTEGER PRIMARY KEY AUTOINCREMENT,
-  session_id     TEXT NOT NULL REFERENCES game_sessions(id),
-  student_id     TEXT NOT NULL,
-  question_id    INTEGER NOT NULL REFERENCES questions(id),
-  seq_no         INTEGER NOT NULL,         -- 本局第幾題（從 1 開始）
-  chosen         TEXT NOT NULL,            -- 學生選的答案
-  correct        INTEGER NOT NULL,         -- 1 = 答對
-  response_ms    INTEGER NOT NULL,         -- 作答時間（毫秒，伺服器計算）
-  layout         TEXT NOT NULL,            -- 當時按鈕排列
-  base_points    INTEGER NOT NULL DEFAULT 0,
-  speed_points   INTEGER NOT NULL DEFAULT 0,
-  combo_points   INTEGER NOT NULL DEFAULT 0,
-  penalty_points INTEGER NOT NULL DEFAULT 0,
-  score_delta    INTEGER NOT NULL,         -- 實際加減的分數
-  score_after    INTEGER NOT NULL,
-  combo_after    INTEGER NOT NULL,
-  cooldown_ms    INTEGER NOT NULL DEFAULT 0,
-  answered_at    INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_answers_session ON answers(session_id);
-CREATE INDEX IF NOT EXISTS idx_answers_student ON answers(student_id);
-CREATE INDEX IF NOT EXISTS idx_answers_question ON answers(question_id);
+-- 每位學生的最佳成績（排行榜用；同分時保留較早的那一局）
+CREATE TABLE IF NOT EXISTS best_scores (
+  student_id    TEXT PRIMARY KEY,
+  score         INTEGER NOT NULL,
+  accuracy      INTEGER NOT NULL,           -- 0–100
+  answered      INTEGER NOT NULL,
+  correct       INTEGER NOT NULL,
+  max_combo     INTEGER NOT NULL,
+  finished_at   INTEGER NOT NULL,
+  session_token TEXT NOT NULL
+) WITHOUT ROWID;
 
--- 每位學生的最佳一局（同分時，較早達成的排前面）。排行榜與後台都用這個 view。
-DROP VIEW IF EXISTS v_best_sessions;
-CREATE VIEW v_best_sessions AS
-SELECT * FROM (
-  SELECT gs.*,
-         ROW_NUMBER() OVER (
-           PARTITION BY gs.student_id
-           ORDER BY gs.score DESC, gs.finished_at ASC
-         ) AS rn
-  FROM game_sessions gs
-  WHERE gs.status = 'finished' AND gs.answered_count > 0
-)
-WHERE rn = 1;
-
-PRAGMA user_version = 1;
+-- 題目作答統計（依班級累計；局結束時寫入）
+CREATE TABLE IF NOT EXISTS question_stats (
+  question_id INTEGER NOT NULL,
+  class_name  TEXT NOT NULL,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  correct     INTEGER NOT NULL DEFAULT 0,
+  total_ms    INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (question_id, class_name)
+) WITHOUT ROWID;

@@ -2,42 +2,17 @@
 // 用假的時鐘跑完整 API 流程（不需要真的等 3 分鐘）
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const http = require('node:http');
-const fs = require('node:fs');
-const path = require('node:path');
-const config = require('../lib/load-config');
-const { openDatabase } = require('../lib/db');
-const { createApp } = require('../lib/app');
-const { importStudents, importQuestions } = require('../lib/importers');
+const { makeApp } = require('./helpers');
 
 let clock = 1_800_000_000_000;
-let server;
-let base;
-let db;
+let ctx;
+const call = (...a) => ctx.call(...a);
+const answerOf = async (qid) => (await ctx.store.first('SELECT answer FROM questions WHERE id = ?', qid)).answer;
+const flip = (a) => (a === '權利' ? '權力' : '權利');
 
 test.before(async () => {
-  db = openDatabase(':memory:');
-  const root = path.join(__dirname, '..', 'samples');
-  importStudents(db, fs.readFileSync(path.join(root, 'students.sample.csv'), 'utf8'));
-  importQuestions(db, fs.readFileSync(path.join(root, 'questions.csv'), 'utf8'));
-  const app = createApp({ db, config, adminPassword: 'teacher-pass', now: () => clock });
-  server = http.createServer(app.handler);
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  base = `http://127.0.0.1:${server.address().port}`;
+  ctx = await makeApp({ clock: () => clock });
 });
-test.after(() => server.close());
-
-async function call(p, body, headers = {}) {
-  const res = await fetch(base + p, body === undefined ? { headers } : {
-    method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  let data;
-  try { data = JSON.parse(text); } catch { data = text; }
-  return { status: res.status, data, headers: res.headers };
-}
-const answerOf = (qid) => db.prepare('SELECT answer FROM questions WHERE id = ?').get(qid).answer;
-const flip = (a) => (a === '權利' ? '權力' : '權利');
 
 test('找不到學號', async () => {
   const r = await call('/api/login', { studentId: '99999' });
@@ -50,46 +25,42 @@ test('完整一局：計分、冷卻、時間到、個人紀錄、排行榜', as
   assert.ok(!('answer' in s.question), '題目不能附帶答案');
   assert.deepEqual(s.question.choices, ['權利', '權力'], '按鈕固定：左權利、右權力');
 
-  // 開場倒數中不能作答
   let r = await call('/api/game/answer', { sessionId: s.sessionId, questionId: s.question.id, choice: '權利' });
-  assert.equal(r.data.code, 'NOT_READY');
+  assert.equal(r.data.code, 'NOT_READY', '開場倒數中不能作答');
 
-  clock += 3000 + 1000; // 倒數結束，1 秒後作答
+  clock += 3000 + 1000;
   let q = s.question;
-  r = await call('/api/game/answer', { sessionId: s.sessionId, questionId: q.id, choice: answerOf(q.id) });
+  r = await call('/api/game/answer', { sessionId: s.sessionId, questionId: q.id, choice: await answerOf(q.id) });
   assert.equal(r.data.correct, true);
   assert.equal(r.data.score, 140);
   q = r.data.next;
   assert.deepEqual(q.choices, ['權利', '權力'], '下一題按鈕仍固定');
 
-  // 再對 2 題（第 3 題拿 Combo +10），各 0 秒
   for (let i = 0; i < 2; i++) {
-    r = await call('/api/game/answer', { sessionId: s.sessionId, questionId: q.id, choice: answerOf(q.id) });
+    r = await call('/api/game/answer', { sessionId: s.sessionId, questionId: q.id, choice: await answerOf(q.id) });
     q = r.data.next;
   }
   assert.equal(r.data.score, 140 + 150 + 150 + 10);
   assert.equal(r.data.combo, 3);
 
-  // 連錯兩題 → 冷卻 2 秒
-  r = await call('/api/game/answer', { sessionId: s.sessionId, questionId: q.id, choice: flip(answerOf(q.id)) });
+  // 同一題重送（連點）不會重複計分
+  const dup = await call('/api/game/answer', { sessionId: s.sessionId, questionId: s.question.id, choice: '權利' });
+  assert.equal(dup.data.code, 'STALE');
+
+  r = await call('/api/game/answer', { sessionId: s.sessionId, questionId: q.id, choice: flip(await answerOf(q.id)) });
   q = r.data.next;
   assert.equal(r.data.cooldownMs, 0);
-  r = await call('/api/game/answer', { sessionId: s.sessionId, questionId: q.id, choice: flip(answerOf(q.id)) });
+  r = await call('/api/game/answer', { sessionId: s.sessionId, questionId: q.id, choice: flip(await answerOf(q.id)) });
   q = r.data.next;
-  assert.equal(r.data.cooldownMs, 2000);
+  assert.equal(r.data.cooldownMs, 2000, '連錯 2 題觸發冷卻');
   assert.equal(r.data.score, 450 - 100);
   const blocked = await call('/api/game/answer', { sessionId: s.sessionId, questionId: q.id, choice: '權利' });
   assert.equal(blocked.data.code, 'NOT_READY', '冷卻中不能作答');
   clock += 2000;
 
-  // 舊題目重送會被拒絕
-  const stale = await call('/api/game/answer', { sessionId: s.sessionId, questionId: -1, choice: '權利' });
-  assert.equal(stale.data.code, 'STALE');
-
-  // 時間到（+寬限）之後作答不算分
   clock += 180_000 + 2000;
-  r = await call('/api/game/answer', { sessionId: s.sessionId, questionId: q.id, choice: answerOf(q.id) });
-  assert.equal(r.data.finished, true);
+  r = await call('/api/game/answer', { sessionId: s.sessionId, questionId: q.id, choice: await answerOf(q.id) });
+  assert.equal(r.data.finished, true, '時間到之後作答不算分');
   const fin = (await call('/api/game/finish', { sessionId: s.sessionId })).data;
   assert.equal(fin.score, 350);
   assert.equal(fin.answeredCount, 5);
@@ -99,13 +70,23 @@ test('完整一局：計分、冷卻、時間到、個人紀錄、排行榜', as
   assert.equal(fin.isNewRecord, false, '第一局不顯示 NEW RECORD');
   assert.equal(fin.isFirstGame, true);
   assert.equal(fin.review.length, 2, '錯題回顧');
+  assert.ok(fin.review[0].explanation, '錯題附解析');
   assert.equal(fin.grade.label, '丁', '分數 350 → 丁');
-  assert.ok(fin.grade.next && fin.grade.next.label === '丙');
+  assert.equal(fin.rank, 1);
 
-  // 第二局：較低分 → 不破紀錄，最高分仍為 350
+  // 每答一題只寫一筆紀錄到 log
+  const row = await ctx.store.first('SELECT log FROM game_sessions WHERE token = ?', s.sessionId);
+  assert.equal(JSON.parse(row.log).length, 5);
+
+  // 再結算一次不會重複統計
+  await call('/api/game/finish', { sessionId: s.sessionId });
+  const stat = await ctx.store.first('SELECT SUM(attempts) AS n FROM question_stats');
+  assert.equal(stat.n, 5);
+
+  // 第二局：較低分 → 不破紀錄
   const s2 = (await call('/api/game/start', { studentId: '70101' })).data;
   clock += 3000;
-  await call('/api/game/answer', { sessionId: s2.sessionId, questionId: s2.question.id, choice: answerOf(s2.question.id) });
+  await call('/api/game/answer', { sessionId: s2.sessionId, questionId: s2.question.id, choice: await answerOf(s2.question.id) });
   clock += 180_000;
   const fin2 = (await call('/api/game/finish', { sessionId: s2.sessionId })).data;
   assert.equal(fin2.isNewRecord, false);
@@ -116,7 +97,7 @@ test('完整一局：計分、冷卻、時間到、個人紀錄、排行榜', as
   clock += 3000;
   let qq = s3.question;
   for (let i = 0; i < 5; i++) {
-    const a = await call('/api/game/answer', { sessionId: s3.sessionId, questionId: qq.id, choice: answerOf(qq.id) });
+    const a = await call('/api/game/answer', { sessionId: s3.sessionId, questionId: qq.id, choice: await answerOf(qq.id) });
     qq = a.data.next;
   }
   clock += 180_000;
@@ -124,54 +105,78 @@ test('完整一局：計分、冷卻、時間到、個人紀錄、排行榜', as
   assert.equal(fin3.isNewRecord, true);
   assert.equal(fin3.previousBest, 350);
 
-  // 排行榜：每人只出現一次，不含學號
   const lb = (await call('/api/leaderboard')).data;
-  assert.equal(lb.entries.length, 1);
+  assert.equal(lb.entries.length, 1, '排行榜每人只出現一次');
   assert.equal(lb.entries[0].bestScore, fin3.score);
   assert.ok(!JSON.stringify(lb).includes('70101'), '排行榜不能出現學號');
 });
 
-test('重新開局會結束上一局未完成的遊戲', async () => {
+test('重新開局會結束上一局；時間到沒按結算也會自動結算', async () => {
   const a = (await call('/api/game/start', { studentId: '70201' })).data;
+  clock += 3000;
+  await call('/api/game/answer', { sessionId: a.sessionId, questionId: a.question.id, choice: await answerOf(a.question.id) });
   const b = (await call('/api/game/start', { studentId: '70201' })).data;
   assert.notEqual(a.sessionId, b.sessionId);
-  const r = await call('/api/game/resume', { sessionId: a.sessionId });
-  assert.equal(r.data.finished, true);
+  assert.equal((await call('/api/game/resume', { sessionId: a.sessionId })).data.finished, true);
+  clock += 3000;
+  await call('/api/game/answer', { sessionId: b.sessionId, questionId: b.question.id, choice: await answerOf(b.question.id) });
+  clock += 190_000; // 學生直接關掉網頁
+  await call('/api/leaderboard'); // 讀排行榜時會自動結算過期的局
+  const st = await ctx.store.first('SELECT status FROM game_sessions WHERE token = ?', b.sessionId);
+  assert.equal(st.status, 'finished');
 });
 
 test('教師後台需要登入與自訂標頭', async () => {
   assert.equal((await call('/api/admin/students')).status, 401);
   assert.equal((await call('/api/admin/export/students.csv')).status, 401);
-  const noHeader = await call('/api/admin/login', { password: 'teacher-pass' });
-  assert.equal(noHeader.status, 403);
+  assert.equal((await call('/api/admin/login', { password: 'teacher-pass' })).status, 403);
   const bad = await call('/api/admin/login', { password: 'nope' }, { 'X-Requested-With': 'rp-admin' });
   assert.equal(bad.status, 401);
   const ok = await call('/api/admin/login', { password: 'teacher-pass' }, { 'X-Requested-With': 'rp-admin' });
   assert.equal(ok.status, 200);
-  const cookie = ok.headers.get('set-cookie').split(';')[0];
-  assert.match(ok.headers.get('set-cookie'), /HttpOnly/);
+  const setCookie = ok.headers.get('set-cookie');
+  assert.match(setCookie, /HttpOnly/);
+  assert.match(setCookie, /Secure/, 'https 時加上 Secure');
+  const cookie = setCookie.split(';')[0];
+  const forged = cookie.replace(/\.[^.]+$/, '.forged');
+  assert.equal((await call('/api/admin/students', undefined, { Cookie: forged })).status, 401, '偽造的通行證無效');
 
   const st = await call('/api/admin/students?class=701', undefined, { Cookie: cookie });
   assert.equal(st.status, 200);
   assert.ok(st.data.students.every((s) => s.className === '701'));
   const me = st.data.students.find((s) => s.studentId === '70101');
   assert.equal(me.plays, 3);
+  assert.ok(me.bestGrade);
 
   const qs = await call('/api/admin/questions', undefined, { Cookie: cookie });
-  const attempted = qs.data.questions.filter((q) => q.attempts > 0);
-  assert.ok(attempted.length > 0);
+  assert.ok(qs.data.questions.some((q) => q.attempts > 0));
 
-  for (const kind of ['students', 'sessions', 'answers', 'question-stats', 'questions', 'students-list']) {
-    const res = await fetch(`${base}/api/admin/export/${kind}.csv`, { headers: { Cookie: cookie } });
+  const ans = await call('/api/admin/answers', undefined, { Cookie: cookie });
+  assert.ok(ans.data.sessions.length >= 3);
+  assert.ok(Array.isArray(JSON.parse(ans.data.sessions[0].log)));
+
+  for (const kind of ['students', 'sessions', 'question-stats', 'questions', 'students-list']) {
+    const res = await ctx.app.handle(new Request(`https://game.test/api/admin/export/${kind}.csv`, { headers: { Cookie: cookie } }), {});
     assert.equal(res.status, 200, kind);
     const bytes = new Uint8Array(await res.arrayBuffer());
     assert.deepEqual([...bytes.slice(0, 3)], [0xef, 0xbb, 0xbf], `${kind} 有 BOM`);
   }
+
+  // 清除成績需要輸入確認文字
+  const xhr = { Cookie: cookie, 'X-Requested-With': 'rp-admin' };
+  assert.equal((await call('/api/admin/reset-scores', { confirm: '' }, xhr)).status, 400);
+  const reset = await call('/api/admin/reset-scores', { confirm: '確認清除' }, xhr);
+  assert.equal(reset.status, 200);
+  assert.equal((await call('/api/leaderboard')).data.entries.length, 0);
+  assert.equal((await ctx.store.first('SELECT COUNT(*) AS n FROM students')).n, 12, '名單保留');
 });
 
-test('靜態檔案不能讀到專案目錄外', async () => {
-  const r = await fetch(`${base}/..%2fconfig.js`);
-  assert.equal(r.status, 404);
-  const ok = await fetch(`${base}/`);
-  assert.equal(ok.status, 200);
+test('沒設定密碼時後台不能登入', async () => {
+  const c = await makeApp({ password: '', withData: false });
+  const r = await c.call('/api/admin/login', { password: 'whatever1' }, { 'X-Requested-With': 'rp-admin' });
+  assert.equal(r.status, 503);
+});
+
+test('非 /api/ 路徑交給靜態檔案', async () => {
+  assert.equal(await ctx.app.handle(new Request('https://game.test/index.html'), {}), null);
 });

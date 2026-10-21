@@ -143,6 +143,17 @@
           <a class="panel a-exp" data-exp="questions"><b>題庫</b><span>目前啟用中的題目（可修改後再匯入）</span></a>
         </div>
         <p class="a-note">匯出的 CSV 可直接用 Excel 開啟。前四項會套用上方選擇的班級。</p>
+
+        <form class="panel a-danger" id="reset-form">
+          <h2>清除成績（新學期或新一輪比賽）</h2>
+          <p>會刪除<b>所有</b>遊玩紀錄、排行榜與題目統計；學生名單和題庫會保留。清除後無法復原，請先匯出需要的成績。</p>
+          <label for="reset-confirm">請輸入「確認清除」</label>
+          <div class="a-row">
+            <input id="reset-confirm" autocomplete="off" placeholder="確認清除">
+            <button class="btn btn-danger" type="submit">清除所有成績</button>
+          </div>
+          <div class="imp-result" aria-live="polite"></div>
+        </form>
       </div>
     </div>
   </section>

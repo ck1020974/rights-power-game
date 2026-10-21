@@ -167,10 +167,80 @@
   function updateExportLinks() {
     document.querySelectorAll('.a-exp').forEach((a) => {
       const kind = a.dataset.exp;
+      if (kind === 'answers') { a.href = '#'; return; }
       const scoped = !['students-list', 'questions'].includes(kind);
       a.href = `/api/admin/export/${kind}.csv${scoped ? qs() : ''}`;
     });
   }
+
+  // 作答明細：分批下載原始紀錄，在瀏覽器組成 CSV（伺服器負擔小，符合免費方案限制）
+  const csvCell = (v) => {
+    if (v === null || v === undefined) return '';
+    let s = String(v);
+    if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csvLine = (cells) => cells.map(csvCell).join(',') + '\r\n';
+  const tsf = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  async function exportAnswers(link) {
+    const label = link.querySelector('span');
+    const original = label.textContent;
+    try {
+      const { questions } = await api('/api/admin/questions');
+      const qmap = new Map(questions.map((q) => [q.id, q]));
+      let out = '\uFEFF' + csvLine(['場次ID', '學號', '姓名', '班級', '結束時間', '第幾題', '題號', '題目', '正確答案', '學生選擇', '是否答對', '作答秒數', '按鈕排列', '得分變化', '冷卻毫秒', '作答時間']);
+      let cursor = 0;
+      let count = 0;
+      do {
+        label.textContent = `下載中…（已處理 ${count} 局）`;
+        const page = await api(`/api/admin/answers?cursor=${cursor}${state.cls ? `&class=${encodeURIComponent(state.cls)}` : ''}`);
+        for (const s of page.sessions) {
+          JSON.parse(s.log).forEach(([qid, ch, ok, ms, delta, lay, cd, at], i) => {
+            const q = qmap.get(qid) || {};
+            out += csvLine([s.id, s.studentId, s.name, s.className, s.finishedAt, i + 1, q.code, q.text, q.answer, ch === 0 ? '權利' : '權力',
+              ok ? '是' : '否', Math.round(ms / 10) / 100, lay === 0 ? '權利在左' : '權力在左', delta, cd, at ? tsf.format(new Date(at)) : '']);
+          });
+          count++;
+        }
+        cursor = page.next;
+      } while (cursor);
+      const url = URL.createObjectURL(new Blob([out], { type: 'text/csv;charset=utf-8' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `作答明細${state.cls ? `_${state.cls}` : ''}.csv`;
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (e) {
+      toast(e.message);
+    } finally {
+      label.textContent = original;
+    }
+  }
+  document.querySelector('.a-exp[data-exp="answers"]').addEventListener('click', (ev) => {
+    ev.preventDefault();
+    exportAnswers(ev.currentTarget);
+  });
+
+  $('reset-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const box = ev.target.querySelector('.imp-result');
+    const btn = ev.target.querySelector('button');
+    btn.disabled = true;
+    try {
+      const r = await api('/api/admin/reset-scores', { confirm: $('reset-confirm').value.trim() });
+      box.className = 'imp-result ok';
+      box.textContent = `已清除 ${r.deletedSessions} 局遊玩紀錄，排行榜已歸零。`;
+      $('reset-confirm').value = '';
+      loadAll();
+    } catch (e) {
+      box.className = 'imp-result fail';
+      box.textContent = e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   // ── 匯入 ─────────────────────────────────────────
   async function readCsvFile(file) {
@@ -187,7 +257,7 @@
     box.replaceChildren();
     const head = document.createElement('b');
     if (r.ok) {
-      head.textContent = `匯入成功：共 ${r.total} 筆，新增 ${r.inserted}、更新 ${r.updated}${r.deactivated ? `、停用 ${r.deactivated}` : ''}`;
+      head.textContent = `匯入成功：共 ${r.total} 筆，新增 ${r.inserted}、更新 ${r.updated}${r.unchanged ? `、未變動 ${r.unchanged}` : ''}${r.deactivated ? `、停用 ${r.deactivated}` : ''}`;
     } else {
       head.textContent = '沒有匯入任何資料，請修正下列問題後重新上傳';
     }
@@ -262,7 +332,7 @@
       const me = await api('/api/admin/me');
       if (!me.enabled) {
         showLogin();
-        $('a-login-error').textContent = '後台尚未啟用：請在伺服器設定 ADMIN_PASSWORD（至少 8 個字元）後重新啟動';
+        $('a-login-error').textContent = '後台尚未啟用：請在 Cloudflare 的 Worker 設定中新增 Secret「ADMIN_PASSWORD」（至少 8 個字元）';
         return;
       }
       if (me.authed) { show('a-main'); loadAll(); } else showLogin();

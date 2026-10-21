@@ -1,7 +1,6 @@
 node_modules/
-.env
-data/*
-!data/.gitkeep
+.wrangler/
+.dev.vars
 
 # 真實學生名單含個資，請勿上傳（範例名單 samples/students.sample.csv 是虛構的）
 private/

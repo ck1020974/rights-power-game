@@ -80,3 +80,9 @@ body.admin { background-image: none; }
 .a-dialog-head h2 { margin: 0; font-size: 1.2rem; }
 
 .a-table td.grade-cell { font-family: var(--kai); font-weight: 800; font-size: 1.05rem; }
+
+.a-danger { margin-top: 26px; display: grid; gap: 10px; border-color: var(--bad); }
+.a-danger h2 { color: var(--bad); }
+.a-danger p { margin: 0; }
+.a-danger input { min-height: 42px; padding: 0 12px; border: 2px solid var(--line); border-radius: 10px; }
+.btn-danger { background: var(--bad); color: #fff; }
