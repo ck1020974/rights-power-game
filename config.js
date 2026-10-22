@@ -59,13 +59,18 @@ module.exports = {
   ],
   reportCardTitle: '公民科 學習成績單',
 
+  // ── 測試帳號 ─────────────────────────────────────
+  // 任何人都能用這些學號試玩：不必匯入名單、不上榮譽榜、不計入後台統計，
+  // 多人同時使用也不會互相干擾。
+  testAccounts: ['LJ140000'],
+
   // ── 其他 ─────────────────────────────────────────
   leaderboard: { size: 10 }, // 排行榜顯示名次數
   timezone: 'Asia/Taipei', // 匯出資料的時間顯示時區
 
   // 防濫用（以來源 IP 計算；全校共用同一個對外 IP 時請放寬）
   limits: {
-    loginPerMinutePerIp: 120, // 每分鐘最多嘗試輸入學號的次數
+    loginPerMinutePerIp: 1000, // 每分鐘最多登入／開局次數（全班共用學校 Wi-Fi 時是同一個 IP，所以設高一點）
     adminLoginFailures: 10, // 教師後台：連續輸入錯誤密碼幾次後暫時鎖定
     adminLoginWindowMinutes: 15, // 上述鎖定的計算視窗（分鐘）
   },

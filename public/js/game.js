@@ -420,7 +420,7 @@
     $('r-acc').textContent = `${r.accuracy}%`;
     $('r-combo').textContent = `${r.maxCombo} 題`;
     $('r-best').textContent = r.bestScore.toLocaleString();
-    $('r-rank').textContent = r.rank ? `第 ${r.rank} 名` : '—';
+    $('r-rank').textContent = r.isTest ? '測試帳號不列入' : r.rank ? `第 ${r.rank} 名` : '—';
     $('record-banner').hidden = !r.isNewRecord;
 
     // 成績單抬頭與等第

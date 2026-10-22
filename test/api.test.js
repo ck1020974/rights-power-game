@@ -180,3 +180,28 @@ test('沒設定密碼時後台不能登入', async () => {
 test('非 /api/ 路徑交給靜態檔案', async () => {
   assert.equal(await ctx.app.handle(new Request('https://game.test/index.html'), {}), null);
 });
+
+test('測試帳號 LJ140000：多人同時玩、不上榮譽榜、不計入後台', async () => {
+  const c = await makeApp({ clock: () => clock });
+  const lg = await c.call('/api/login', { studentId: 'lj140000' });
+  assert.equal(lg.status, 200, '小寫也能登入、不用匯入名單');
+  assert.equal(lg.data.student.name, '測試帳號');
+  const a = (await c.call('/api/game/start', { studentId: 'LJ140000' })).data;
+  const b = (await c.call('/api/game/start', { studentId: 'LJ140000' })).data;
+  clock += 3000;
+  const ra = await c.call('/api/game/answer', { sessionId: a.sessionId, questionId: a.question.id, choice: '權利' });
+  const rb = await c.call('/api/game/answer', { sessionId: b.sessionId, questionId: b.question.id, choice: '權利' });
+  assert.ok(ra.status === 200 && rb.status === 200, '兩人同時玩互不干擾');
+  clock += 181_000;
+  const fin = (await c.call('/api/game/finish', { sessionId: a.sessionId })).data;
+  assert.equal(fin.isTest, true);
+  assert.equal(fin.rank, null);
+  assert.ok(fin.grade, '仍有成績單等第');
+  await c.call('/api/game/finish', { sessionId: b.sessionId });
+  assert.equal((await c.call('/api/leaderboard')).data.entries.length, 0, '不上榮譽榜');
+  assert.equal((await c.store.first('SELECT COUNT(*) AS n FROM question_stats')).n, 0, '不計入題目統計');
+  const ok = await c.call('/api/admin/login', { password: 'teacher-pass' }, { 'X-Requested-With': 'rp-admin' });
+  const cookie = ok.headers.get('set-cookie').split(';')[0];
+  const ov = (await c.call('/api/admin/overview', undefined, { Cookie: cookie })).data;
+  assert.equal(ov.sessions, 0, '不計入後台遊玩次數');
+});
